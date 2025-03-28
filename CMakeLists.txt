@@ -14,6 +14,8 @@
 cmake_minimum_required(VERSION 3.12)
 project(RedNoise)
 
+set(LIBS_DIR "${CMAKE_SOURCE_DIR}/libs")
+
 set(CMAKE_CXX_STANDARD 14)
 
 # Note, we do this for glm because it's a header only library and because we shipped it with the project
@@ -77,3 +79,5 @@ target_compile_options(RedNoise PUBLIC "$<$<CONFIG:Release>:${RELEASE_OPTIONS}>"
 target_compile_options(RedNoise PUBLIC "$<$<CONFIG:Debug>:${DEBUG_OPTIONS}>")
  
 target_link_libraries(RedNoise PRIVATE ${SDL2_LIBRARIES})
+
+add_subdirectory(src/week3)
