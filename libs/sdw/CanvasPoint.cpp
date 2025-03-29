@@ -28,3 +28,16 @@ std::ostream &operator<<(std::ostream &os, const CanvasPoint &point) {
 	os << "(" << point.x << ", " << point.y << ", " << point.depth << ") " << point.brightness;
 	return os;
 }
+
+CanvasPoint CanvasPoint::operator-(const CanvasPoint &rh) {
+	return CanvasPoint{x - rh.x, y - rh.y};
+}
+
+CanvasPoint CanvasPoint::operator*(float num) {
+	return CanvasPoint{x * num, y * num};
+}
+
+CanvasPoint CanvasPoint::operator+(const CanvasPoint &rh)
+{
+	return CanvasPoint{x + rh.x, y + rh.y};
+}

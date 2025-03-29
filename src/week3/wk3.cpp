@@ -50,8 +50,8 @@ void line(CanvasPoint from, CanvasPoint to, uint32_t color, DrawingWindow &windo
 	float xStepSize = xDiff/numberOfSteps;
 	float yStepSize = yDiff/numberOfSteps;
 	for (float i = 0.0; i <= numberOfSteps; i++) {
-		float x = from.x + (xStepSize * i);
-		float y = from.y + (yStepSize * i);
+		float x = int(from.x + (xStepSize * i) + 0.5);
+		float y = int(from.y + (yStepSize * i) + 0.5);
 
 		window.setPixelColour(x, y, color);
 	}
@@ -59,8 +59,8 @@ void line(CanvasPoint from, CanvasPoint to, uint32_t color, DrawingWindow &windo
 
 void addTriangle() {
 	auto v0 = std::rand() % 255;
-	auto v1 = rand() % 255;
-	auto v2 = rand() % 255;
+	auto v1 = std::rand() % 255;
+	auto v2 = std::rand() % 255;
 	CanvasTriangle t{CanvasPoint{float(std::rand()%255), float(std::rand()%255)}, CanvasPoint{float(std::rand()%255), float(std::rand()%255)}, CanvasPoint{float(std::rand()%255), float(std::rand()%255)}};
 	Colour c{std::rand()%255, std::rand()%255, std::rand()%255};
 
@@ -68,12 +68,47 @@ void addTriangle() {
 }
 
 void drawTriangle(CanvasTriangle triangle, Colour color, DrawingWindow &window) {
-	uint32_t colour = (color.red << 24) + (color.green << 16) + (color.blue << 8) + int(255);
+	uint32_t colour = (255 << 24) + (color.red << 16) + (color.green << 8) + int(color.blue);
 	line(triangle[0], triangle[1], colour, window);
 	line(triangle[1], triangle[2], colour, window);
 	line(triangle[2], triangle[0], colour, window);
 }
 
+void fillTriangle(CanvasTriangle triangle, Colour color, DrawingWindow &window) {
+	auto v0 = triangle.v0();
+	auto v1 = triangle.v1();
+	auto v2 = triangle.v2();
+	if (v0.y > v1.y) { std::swap(v0, v1); }
+	if (v0.y > v2.y) { std::swap(v0, v2); }
+	if (v1.y > v2.y) { std::swap(v1, v2); }
+	auto vm = v0 + (v2-v0) * ((v1.y - v0.y)/(v2.y - v0.y));
+	// std::cout << vm.x << ", " << vm.y << std::endl;
+	// uint32_t colour = (255 << 24) + (255 << 16) + (255 << 8) + int(0);
+	// window.setPixelColour(vm.x + 3, vm.y, colour);
+	//top
+	uint32_t colour = (255 << 24) + (color.red << 16) + (color.green << 8) + int(color.blue);
+	float xd0m = vm.x - v0.x;
+	float xd01 = v1.x - v0.x;
+	float yd = vm.y - v0.y;
+	for (int i = 0; i < yd; i++) {
+		float rate = i/(float)yd;
+		float xFrom = int(v0.x + xd0m * rate + 0.5);
+		float xTo = int(v0.x + xd01 * rate + 0.5);
+		line(CanvasPoint{xFrom, v0.y+i}, CanvasPoint{xTo, v0.y+i}, colour, window);
+	}
+	//bottom
+	yd = v2.y - vm.y;
+	float xdm2 = v2.x - vm.x;
+	float xd12 = v2.x - v1.x;
+	for (int i = 0; i < yd; i++) {
+		float rate = i/(float)yd;
+		float xFrom = int(vm.x + xdm2 * rate + 0.5);
+		float xTo = int(v1.x + xd12 * rate + 0.5);
+		line(CanvasPoint{xFrom, vm.y+i}, CanvasPoint{xTo, vm.y+i}, colour, window);
+	}
+
+	drawTriangle(triangle, Colour{255, 255, 255}, window);
+}
 //task3:single dimension greyscale interpolation
 // void draw(DrawingWindow &window) {
 // 	window.clearPixels();
@@ -122,7 +157,8 @@ void draw(DrawingWindow &window) {
 	for (auto triangle : triangles) {
 		CanvasTriangle t = std::get<0>(triangle);
 		Colour c = std::get<1>(triangle);
-		drawTriangle(t, c, window);
+		// drawTriangle(t, c, window);
+		fillTriangle(t, c, window);
 	}
 	// uint32_t colour = (255 << 24) + (int(255) << 16) + (int(255) << 8) + int(255);
 	// line(CanvasPoint(0.0, 0.0), CanvasPoint(WIDTH/2, HEIGHT/2), colour, window);
@@ -139,6 +175,7 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 		else if (event.key.keysym.sym == SDLK_UP) std::cout << "UP" << std::endl;
 		else if (event.key.keysym.sym == SDLK_DOWN) std::cout << "DOWN" << std::endl;
 		else if (event.key.keysym.sym == SDLK_u) {	addTriangle(); std::cout << "u" << std::endl;	}
+		else if (event.key.keysym.sym == SDLK_f) {	addTriangle(); std::cout << "f" << std::endl;	}
 	} else if (event.type == SDL_MOUSEBUTTONDOWN) {
 		window.savePPM("output.ppm");
 		window.saveBMP("output.bmp");
