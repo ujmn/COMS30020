@@ -16,7 +16,7 @@ project(RedNoise)
 
 set(LIBS_DIR "${CMAKE_SOURCE_DIR}/libs")
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 
 # Note, we do this for glm because it's a header only library and because we shipped it with the project
 # normally you would use find_package(<package_name>) for libraries with actual objects

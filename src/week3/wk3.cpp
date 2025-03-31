@@ -9,6 +9,7 @@
 #include <Colour.h>
 #include <cstdlib>
 #include <tuple>
+#include <TextureMap.h>
 
 #define WIDTH 320
 #define HEIGHT 240
@@ -74,6 +75,7 @@ void drawTriangle(CanvasTriangle triangle, Colour color, DrawingWindow &window) 
 	line(triangle[2], triangle[0], colour, window);
 }
 
+
 void fillTriangle(CanvasTriangle triangle, Colour color, DrawingWindow &window) {
 	auto v0 = triangle.v0();
 	auto v1 = triangle.v1();
@@ -109,6 +111,132 @@ void fillTriangle(CanvasTriangle triangle, Colour color, DrawingWindow &window) 
 
 	drawTriangle(triangle, Colour{255, 255, 255}, window);
 }
+std::vector<float> barycentric(const CanvasPoint &A, const CanvasPoint &B, const CanvasPoint &C,
+                                     const CanvasPoint &P) {
+	std::vector<float> res;
+    // 提取顶点坐标
+    float x1 = A.x, y1 = A.y;
+    float x2 = B.x, y2 = B.y;
+    float x3 = C.x, y3 = C.y;
+    float x = P.x, y = P.y;
+
+    // 计算分母（总面积的两倍）
+    float denominator = (y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3);
+
+    // 如果分母为零，说明三点共线或重合，无法形成三角形
+    if (std::abs(denominator) < 1e-6) {
+        std::cerr << "Error: The points are collinear or coincident!" << std::endl;
+		res.emplace_back(0.0);
+		res.emplace_back(0.0);
+		res.emplace_back(0.0);
+        return res;
+    }
+
+    // 计算 λ1 和 λ2
+    auto lambda1 = ((y2 - y3) * (x - x3) + (x3 - x2) * (y - y3)) / denominator;
+    auto lambda2 = ((y3 - y1) * (x - x3) + (x1 - x3) * (y - y3)) / denominator;
+
+    // 计算 λ3
+    auto lambda3 = 1.0f - lambda1 - lambda2;
+	res.emplace_back(lambda1);
+	res.emplace_back(lambda2);
+	res.emplace_back(lambda3);
+
+	return res;
+}
+
+// TexturePoint interpolationUV(CanvasTriangle &triangle, CanvasPoint &p) {
+// 	std::vector<float> baryCoord = barycentric(triangle.v0(), triangle.v1(), triangle.v2(), p);
+// 	return triangle.v0().texturePoint * baryCoord[0] + triangle.v1().texturePoint * baryCoord[1] + triangle.v2().texturePoint * baryCoord[2];
+// }
+
+TexturePoint interpolationUV(CanvasTriangle &triangle, CanvasPoint &p) {
+    CanvasPoint &v0 = triangle[0];
+    CanvasPoint &v1 = triangle[1];
+    CanvasPoint &v2 = triangle[2];
+
+    float denominator = (v1.y - v2.y) * (v0.x - v2.x) + (v2.x - v1.x) * (v0.y - v2.y);
+    if (denominator == 0.0f) {
+        return TexturePoint(0.0f, 0.0f);
+    }
+
+    float alpha_numerator = (v1.y - v2.y) * (p.x - v2.x) + (v2.x - v1.x) * (p.y - v2.y);
+    float alpha = alpha_numerator / denominator;
+
+    float beta_numerator = (v2.y - v0.y) * (p.x - v2.x) + (v0.x - v2.x) * (p.y - v2.y);
+    float beta = beta_numerator / denominator;
+
+    float gamma = 1.0f - alpha - beta;
+
+    float u = alpha * v0.texturePoint.x + beta * v1.texturePoint.x + gamma * v2.texturePoint.x;
+    float v = alpha * v0.texturePoint.y + beta * v1.texturePoint.y + gamma * v2.texturePoint.y;
+
+    return TexturePoint(u, v);
+    // return TexturePoint(alpha, beta);
+}
+
+void drawTextureTriangle(CanvasTriangle triangle, TextureMap &text, DrawingWindow &window) {
+	if (triangle.v0().y > triangle.v1().y) std::swap(triangle[0], triangle[1]);
+    if (triangle.v0().y > triangle.v2().y) std::swap(triangle[0], triangle[2]);
+    if (triangle.v1().y > triangle.v2().y) std::swap(triangle[1], triangle[2]);
+	auto v0 = triangle.v0();
+	auto v1 = triangle.v1();
+	auto v2 = triangle.v2();
+	// if (v0.y > v1.y) { std::swap(v0, v1); }
+	// if (v0.y > v2.y) { std::swap(v0, v2); }
+	// if (v1.y > v2.y) { std::swap(v1, v2); }
+
+	auto vm = v0 + (v2-v0) * ((v1.y - v0.y)/(v2.y - v0.y));
+	//top
+	float xd0m = vm.x - v0.x;
+	float xd01 = v1.x - v0.x;
+	float yd = vm.y - v0.y;
+	for (int i = 0; i < yd; i++) {
+		float rate = i/(float)yd;
+		float xFrom = int(v0.x + xd0m * rate + 0.5);
+		float xTo = int(v0.x + xd01 * rate + 0.5);
+		if (xTo < xFrom) { std::swap(xTo, xFrom); }
+		float xDiff = xTo - xFrom;
+		float numberOfSteps = abs(xDiff) + 1e-6;
+		for (float j = 0.0; j <= numberOfSteps; j++) {
+			float x = int(xFrom + j + 0.5);
+			float rate = j / numberOfSteps;
+			// auto uv = uvTo + uvd * rate;
+			auto uv = interpolationUV(triangle, CanvasPoint(x, v0.y + i));
+			auto color = text.at(uv.x, uv.y);
+			// int red = uv.x * 255.0;
+			// int green = uv.y * 255.0;
+			// int blue = (1 - uv.x - uv.y) * 255.0;
+			// auto color = (255 << 24) + (int(red) << 16) + (int(green) << 8) + int(blue); 
+			window.setPixelColour(x, v0.y + i, color);
+		}
+	}
+	//bottom
+	yd = v2.y - vm.y;
+	float xdm2 = v2.x - vm.x;
+	float xd12 = v2.x - v1.x;
+	for (int i = 0; i < yd; i++) {
+		float rate = i/(float)yd;
+		float xFrom = int(vm.x + xdm2 * rate + 0.5);
+		float xTo = int(v1.x + xd12 * rate + 0.5);
+		if (xTo < xFrom) { std::swap(xTo, xFrom); }
+		float xDiff = xTo - xFrom;
+		float numberOfSteps = abs(xDiff) + 1e-6;
+		for (float j = 0.0; j <= numberOfSteps; j++) {
+			float x = int(xFrom + j + 0.5);
+			auto uv = interpolationUV(triangle, CanvasPoint(x, vm.y + i));
+			auto color = text.at(uv.x, uv.y);
+			// int red = uv.x * 255.0;
+			// int green = uv.y * 255.0;
+			// int blue = (1 - uv.x - uv.y) * 255.0;
+			// auto color = (255 << 24) + (int(red) << 16) + (int(green) << 8) + int(blue); 
+			window.setPixelColour(x, vm.y + i, color);
+		}
+	}
+
+	drawTriangle(triangle, Colour{255, 255, 255}, window);
+}
+
 //task3:single dimension greyscale interpolation
 // void draw(DrawingWindow &window) {
 // 	window.clearPixels();
@@ -154,12 +282,22 @@ void fillTriangle(CanvasTriangle triangle, Colour color, DrawingWindow &window) 
 
 void draw(DrawingWindow &window) {
 	window.clearPixels();
-	for (auto triangle : triangles) {
-		CanvasTriangle t = std::get<0>(triangle);
-		Colour c = std::get<1>(triangle);
-		// drawTriangle(t, c, window);
-		fillTriangle(t, c, window);
-	}
+	CanvasPoint v0{160, 10};
+	v0.texturePoint = TexturePoint{195, 5};
+	CanvasPoint v2{300, 230};
+	v2.texturePoint = TexturePoint{395, 380};
+	CanvasPoint v1{10, 150};
+	v1.texturePoint = TexturePoint{65, 330};
+	CanvasTriangle triangle{v0, v1, v2};
+	TextureMap text("./texture.ppm");
+	drawTextureTriangle(triangle, text, window);
+
+	// for (auto triangle : triangles) {
+	// 	CanvasTriangle t = std::get<0>(triangle);
+	// 	Colour c = std::get<1>(triangle);
+	// 	// drawTriangle(t, c, window);
+	// 	fillTriangle(t, c, window);
+	// }
 	// uint32_t colour = (255 << 24) + (int(255) << 16) + (int(255) << 8) + int(255);
 	// line(CanvasPoint(0.0, 0.0), CanvasPoint(WIDTH/2, HEIGHT/2), colour, window);
 	// line(CanvasPoint(WIDTH/2, HEIGHT/2), CanvasPoint(WIDTH, 0.0), colour, window);

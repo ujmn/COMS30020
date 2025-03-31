@@ -1,4 +1,5 @@
 #include "TextureMap.h"
+#include <algorithm>
 
 TextureMap::TextureMap() = default;
 TextureMap::TextureMap(const std::string &filename) {
@@ -16,6 +17,7 @@ TextureMap::TextureMap(const std::string &filename) {
 
 	width = std::stoi(widthAndHeight[0]);
 	height = std::stoi(widthAndHeight[1]);
+	std::cout << "width: " << width << ", height : " << height << std::endl;
 	// Read the max value (which we assume is 255)
 	std::getline(inputStream, nextLine);
 
@@ -32,4 +34,9 @@ TextureMap::TextureMap(const std::string &filename) {
 std::ostream &operator<<(std::ostream &os, const TextureMap &map) {
 	os << "(" << map.width << " x " << map.height << ")";
 	return os;
+}
+
+uint32_t TextureMap::at(float u, float v) {
+	// std::cout << "size : " << pixels.size() << ", u: " << u << ", v :" << v << ", at : " << int(u + (v - 1) * width + 0.5) << std::endl;
+	return pixels.at(std::round(u) + std::round(v) * width);
 }
