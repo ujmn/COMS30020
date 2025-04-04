@@ -61,6 +61,15 @@
         "xtr1common": "cpp",
         "xutility": "cpp",
         "*.tcc": "cpp",
-        "string_view": "cpp"
+        "string_view": "cpp",
+        "algorithm": "cpp",
+        "deque": "cpp",
+        "map": "cpp",
+        "numeric": "cpp",
+        "queue": "cpp",
+        "random": "cpp",
+        "ranges": "cpp",
+        "span": "cpp",
+        "xtree": "cpp"
     }
 }

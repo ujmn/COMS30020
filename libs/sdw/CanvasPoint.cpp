@@ -41,3 +41,7 @@ CanvasPoint CanvasPoint::operator+(const CanvasPoint &rh)
 {
 	return CanvasPoint{x + rh.x, y + rh.y};
 }
+
+CanvasPoint CanvasPoint::operator/(float num) {
+	return CanvasPoint{x/num, y/num};
+}

@@ -37,6 +37,5 @@ std::ostream &operator<<(std::ostream &os, const TextureMap &map) {
 }
 
 uint32_t TextureMap::at(float u, float v) {
-	// std::cout << "size : " << pixels.size() << ", u: " << u << ", v :" << v << ", at : " << int(u + (v - 1) * width + 0.5) << std::endl;
 	return pixels.at(std::round(u) + std::round(v) * width);
 }

@@ -18,4 +18,5 @@ struct CanvasPoint {
 	CanvasPoint operator-(const CanvasPoint &rh);
 	CanvasPoint operator+(const CanvasPoint &rh);
 	CanvasPoint operator*(float num);
+	CanvasPoint operator/(float num);
 };

@@ -19,3 +19,7 @@ TexturePoint TexturePoint::operator+(const TexturePoint &rh) {
 TexturePoint TexturePoint::operator*(float rh) {
 	return TexturePoint{x * rh, y * rh};
 }
+
+TexturePoint TexturePoint::operator/(float rh) {
+	return TexturePoint{x/rh, y/rh};
+}

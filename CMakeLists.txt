@@ -81,3 +81,4 @@ target_compile_options(RedNoise PUBLIC "$<$<CONFIG:Debug>:${DEBUG_OPTIONS}>")
 target_link_libraries(RedNoise PRIVATE ${SDL2_LIBRARIES})
 
 add_subdirectory(src/week3)
+add_subdirectory(src/week4)

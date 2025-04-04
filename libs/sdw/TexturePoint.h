@@ -12,5 +12,6 @@ struct TexturePoint {
 	TexturePoint operator-(const TexturePoint &rh);
 	TexturePoint operator+(const TexturePoint &rh);
 	TexturePoint operator*(float rh);
+	TexturePoint operator/(float rh);
 };
 
