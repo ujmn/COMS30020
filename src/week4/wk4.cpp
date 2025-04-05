@@ -12,14 +12,18 @@
 #include <TextureMap.h>
 #include <toolkit.hpp>
 #include <algorithm>
+#include <limits>
 
 // #define WIDTH 320
 // #define HEIGHT 240
 
-extern const float WIDTH;
-extern const float HEIGHT;
+extern const int WIDTH;
+extern const int HEIGHT;
 
 std::vector<std::tuple<CanvasTriangle, Colour>> triangles;
+
+float zbuffer[WIDTH * HEIGHT]{0.0};
+
 
 
 void addTriangle() {
@@ -177,9 +181,6 @@ void drawModel(T model, DrawingWindow &window, float scale = 1.0) {
 		p0.y += 150;
 		p1.y += 150;
 		p2.y += 150;
-		// p0 = mapPoint2Screen(p0, WIDTH, HEIGHT);
-		// p1 = mapPoint2Screen(p1, WIDTH, HEIGHT);
-		// p2 = mapPoint2Screen(p2, WIDTH, HEIGHT);
 		CanvasTriangle t{p0, p1, p2};
 		Colour c{255, 255, 255};
 		drawTriangle(t, c, window);
@@ -187,6 +188,25 @@ void drawModel(T model, DrawingWindow &window, float scale = 1.0) {
 }
 
 void drawFillModel(std::vector<ModelTriangle> &model, DrawingWindow &window, float scale = 1.0) {
+	for (int i = 0; i < WIDTH * HEIGHT; i++) {
+		zbuffer[i] = -std::numeric_limits<float>::infinity();
+	}
+
+	glm::vec3 cameraPos{0.0, 0.0, 10.0};
+	float focalLength{3.0};
+	for (const auto &triangle : model) {
+		auto v0 = triangle.vertices[0];
+		v0 = projectVertiexOntoCanvasPoint(cameraPos, focalLength, v0, scale);
+		auto v1 = triangle.vertices[1];
+		v1 = projectVertiexOntoCanvasPoint(cameraPos, focalLength, v1, scale);
+		auto v2 = triangle.vertices[2];
+		v2 = projectVertiexOntoCanvasPoint(cameraPos, focalLength, v2, scale);
+		CanvasTriangle t{v0, v1, v2};
+		drawFillTriangle(t, triangle.colour, window);
+	}
+}
+
+void drawPointcloudModel(std::vector<ModelTriangle> &model, DrawingWindow &window, float scale = 1.0) {
 	glm::vec3 cameraPos{0.0, 0.0, 10.0};
 	float focalLength{5.0};
 	for (const auto &triangle : model) {
@@ -200,6 +220,41 @@ void drawFillModel(std::vector<ModelTriangle> &model, DrawingWindow &window, flo
 		drawFillTriangle(t, triangle.colour, window);
 	}
 }
+
+template<typename T>
+void drawPointcloudModel(T &model, DrawingWindow &window, float scale = 1.0) {
+	auto vertics = std::get<0>(model);
+	glm::vec3 cameraPos{0.0, 0.0, 10.0};
+	float focalLength{5.0};
+	auto color = packColor(Colour{255, 255, 255});
+
+	for (const auto &vertex : vertics) {
+		auto v = projectVertiexOntoCanvasPoint(cameraPos, focalLength, vertex, scale);
+		window.setPixelColour(v.x, v.y, color);
+	}
+}
+
+template<typename T>
+void drawWireframeModel(T &model, DrawingWindow &window, float scale = 1.0) {
+	auto [vertics, faces] = model;
+	// auto vertics = std::get<0>(model);
+	glm::vec3 cameraPos{0.0, 0.0, 10.0};
+	float focalLength{5.0};
+	auto color = packColor(Colour{255, 255, 255});
+
+	for (const auto &face : faces) {
+		auto p0 = vertics[face.x - 1];
+		auto p1 = vertics[face.y - 1];
+		auto p2 = vertics[face.z - 1];
+		p0 = projectVertiexOntoCanvasPoint(cameraPos, focalLength, p0, scale);
+		p1 = projectVertiexOntoCanvasPoint(cameraPos, focalLength, p1, scale);
+		p2 = projectVertiexOntoCanvasPoint(cameraPos, focalLength, p2, scale);
+		CanvasTriangle t{p0, p1, p2};
+		Colour c{255, 255, 255};
+		drawTriangle(t, c, window);
+	}
+}
+
 
 void handleEvent(SDL_Event event, DrawingWindow &window) {
 	if (event.type == SDL_KEYDOWN) {
@@ -226,7 +281,9 @@ int main(int argc, char *argv[]) {
 		if (window.pollForInputEvents(event)) handleEvent(event, window);
 		// draw(window);
 		// drawModel(model, window, 20);
-		drawFillModel(model, window, 50);
+		drawFillModel(model, window, 80);
+		// drawPointcloudModel(model, window, 60);
+		// drawWireframeModel(model, window, 60);
 		// Need to render the frame at the end, or nothing actually gets shown on the screen !
 		window.renderFrame();
 	}

@@ -5,7 +5,7 @@ CanvasTriangle::CanvasTriangle(const CanvasPoint &v0, const CanvasPoint &v1, con
     vertices({{v0, v1, v2}}) {}
 
 CanvasTriangle::CanvasTriangle(const glm::vec3 &p0, const glm::vec3 &p1, const glm::vec3 &p2) 
-    : vertices({CanvasPoint{p0.x, p0.y}, CanvasPoint{p1.x, p1.y}, CanvasPoint{p2.x, p2.y}})
+    : vertices({CanvasPoint{p0.x, p0.y, p0.z}, CanvasPoint{p1.x, p1.y, p1.z}, CanvasPoint{p2.x, p2.y, p2.z}})
 {
 }
 

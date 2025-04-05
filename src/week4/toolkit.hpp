@@ -5,8 +5,23 @@
 #include <ModelTriangle.h>
 #include <map>
 
-const float WIDTH = 640;
-const float HEIGHT = 480;
+const int WIDTH = 640.0;
+const int HEIGHT = 480.0;
+
+extern float zbuffer[WIDTH * HEIGHT];
+
+uint32_t packColor(Colour color) {
+	return (255 << 24) + (color.red << 16) + (color.green << 8) + int(color.blue);
+}
+
+Colour unpackColor(uint32_t color) {
+	Colour c;
+	c.red = (color & 0x00FF0000) >> 16;
+	c.green = (color & 0x0000FF00) >> 8;
+	c.blue = (color & 0x000000FF);
+
+	return c;
+}
 
 std::vector<float> interpolateSingleFloats(float from, float to, int numberOfValues) {
 	std::vector<float> ret;
@@ -39,14 +54,23 @@ std::vector<glm::vec3> interpolateThreeElementValues(glm::vec3 from, glm::vec3 t
 void line(CanvasPoint from, CanvasPoint to, uint32_t color, DrawingWindow &window) {
 	float xDiff = to.x - from.x;
 	float yDiff = to.y - from.y;
+	float zDiff = to.depth - from.depth;
 	float numberOfSteps = std::max(abs(xDiff), abs(yDiff));
-	float xStepSize = xDiff/numberOfSteps;
-	float yStepSize = yDiff/numberOfSteps;
+	float xStepSize = xDiff/(numberOfSteps + 1e-6);
+	float yStepSize = yDiff/(numberOfSteps + 1e-6);
+	float zStepSize = zDiff/(numberOfSteps + 1e-6);
 	for (float i = 0.0; i <= numberOfSteps; i++) {
-		float x = int(from.x + (xStepSize * i) + 0.5);
-		float y = int(from.y + (yStepSize * i) + 0.5);
+		int x = int(from.x + (xStepSize * i) + 0.5);
+		int y = int(from.y + (yStepSize * i) + 0.5);
+		float z = from.depth + (zStepSize * i);
+		//test depth
+		// auto cz = int(z) * 10;
+		// auto c = packColor(Colour{cz, cz, cz});
 
-		window.setPixelColour(x, y, color);
+		if (zbuffer[((y-1)) * HEIGHT + x] < z) {
+			zbuffer[(y-1) * HEIGHT + x] = z;
+			window.setPixelColour(x, y, color);
+		} 
 	}
 }
 
@@ -121,20 +145,6 @@ void lineSamplingLine(CanvasPoint from, CanvasPoint to, TexturePoint tFrom, Text
 	}
 }
 
-uint32_t packColor(Colour color) {
-	return (255 << 24) + (color.red << 16) + (color.green << 8) + int(color.blue);
-}
-
-Colour unpackColor(uint32_t color) {
-	Colour c;
-	c.red = (color & 0x00FF0000) >> 16;
-	c.green = (color & 0x0000FF00) >> 8;
-	c.blue = (color & 0x000000FF);
-
-	return c;
-}
-
-
 void drawFillTriangle(CanvasTriangle triangle, Colour color, DrawingWindow &window) {
 	auto v0 = triangle.v0();
 	auto v1 = triangle.v1();
@@ -147,22 +157,30 @@ void drawFillTriangle(CanvasTriangle triangle, Colour color, DrawingWindow &wind
 	uint32_t colour = (255 << 24) + (color.red << 16) + (color.green << 8) + int(color.blue);
 	float xd0m = vm.x - v0.x;
 	float xd01 = v1.x - v0.x;
+	float zd0m = vm.depth - v0.depth;
+	float zd01 = v1.depth - v0.depth;
 	float yd = vm.y - v0.y;
 	for (int i = 0; i < yd; i++) {
 		float rate = i/(float)yd;
 		float xFrom = int(v0.x + xd0m * rate + 0.5);
 		float xTo = int(v0.x + xd01 * rate + 0.5);
-		line(CanvasPoint{xFrom, v0.y+i}, CanvasPoint{xTo, v0.y+i}, colour, window);
+		float zFrom = v0.depth + zd0m * rate;
+		float zTo = v0.depth + zd01 * rate;
+		line(CanvasPoint{xFrom, v0.y+i, zFrom}, CanvasPoint{xTo, v0.y+i, zTo}, colour, window);
 	}
 	//bottom
 	yd = v2.y - vm.y;
 	float xdm2 = v2.x - vm.x;
 	float xd12 = v2.x - v1.x;
+	float zdm2 = v2.depth - vm.depth;
+	float zd12 = v2.depth - v1.depth;
 	for (int i = 0; i < yd; i++) {
 		float rate = i/(float)yd;
 		float xFrom = int(vm.x + xdm2 * rate + 0.5);
 		float xTo = int(v1.x + xd12 * rate + 0.5);
-		line(CanvasPoint{xFrom, vm.y+i}, CanvasPoint{xTo, vm.y+i}, colour, window);
+		float zFrom = vm.depth + zdm2 * rate;
+		float zTo = v1.depth + zd12 * rate;
+		line(CanvasPoint{xFrom, vm.y+i, zFrom}, CanvasPoint{xTo, vm.y+i, zTo}, colour, window);
 	}
 
 	// drawTriangle(triangle, Colour{255, 255, 255}, window);

@@ -30,18 +30,18 @@ std::ostream &operator<<(std::ostream &os, const CanvasPoint &point) {
 }
 
 CanvasPoint CanvasPoint::operator-(const CanvasPoint &rh) {
-	return CanvasPoint{x - rh.x, y - rh.y};
+	return CanvasPoint{x - rh.x, y - rh.y, depth - rh.depth};
 }
 
 CanvasPoint CanvasPoint::operator*(float num) {
-	return CanvasPoint{x * num, y * num};
+	return CanvasPoint{x * num, y * num, depth * num};
 }
 
 CanvasPoint CanvasPoint::operator+(const CanvasPoint &rh)
 {
-	return CanvasPoint{x + rh.x, y + rh.y};
+	return CanvasPoint{x + rh.x, y + rh.y, depth + rh.depth};
 }
 
 CanvasPoint CanvasPoint::operator/(float num) {
-	return CanvasPoint{x/num, y/num};
+	return CanvasPoint{x/num, y/num, depth/num};
 }
