@@ -82,3 +82,4 @@ target_link_libraries(RedNoise PRIVATE ${SDL2_LIBRARIES})
 
 add_subdirectory(src/week3)
 add_subdirectory(src/week4)
+add_subdirectory(src/week5)
