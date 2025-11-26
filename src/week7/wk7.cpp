@@ -23,14 +23,15 @@ extern const int WIDTH;
 extern const int HEIGHT;
 extern glm::mat3 cameraOrientation;
 
-constexpr float PI = 3.14;
+constexpr float PI = 3.14f;
 
 enum class DisplayModel : short {
 	POINT_CLOUND = 0,
 	WIRE_FRAME,
 	RASTERISED,
 	RAY_TRACED,
-	SHADING
+	SHADING,
+	GOURAUD_SHADING
 };
 
 DisplayModel displayModel{DisplayModel::POINT_CLOUND};
@@ -42,12 +43,14 @@ glm::vec3 forward{0.0, 0.0, 1.0};
 // glm::vec3 lightPos{0.1, 2.0, 0.1};
 // glm::vec3 lightPos(0.001f, 2.3389f, 0.007f);
 
-glm::vec3 lightPos(0.001f, 2.0389f, 1.207f);
+glm::vec3 lightPos(0.001f, 3.7389f, 5.207f);
 
 glm::vec3 cameraPos{0.0, 0.0, 15.0};
 float focalLength{10.0};
 std::vector<std::tuple<CanvasTriangle, Colour>> triangles;
 float zbuffer[WIDTH * HEIGHT]{0.0};
+std::vector<std::vector<int>> verInd2faceInd;
+std::vector<std::vector<int>> faceIndex2verInd;
 
 bool orbit = false;
 
@@ -410,9 +413,12 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 				break;
 
 			case DisplayModel::SHADING:
-				displayModel = DisplayModel::POINT_CLOUND;
+				displayModel = DisplayModel::GOURAUD_SHADING;
 				break;
 
+			case DisplayModel::GOURAUD_SHADING:
+				displayModel = DisplayModel::POINT_CLOUND;
+				break;
 			default:
 				break;
 			}
@@ -503,12 +509,68 @@ void drawShadingScene(DrawingWindow &window, const std::vector<ModelTriangle> &m
 		cameraPos = cameraPos * r;
 		lookAt();
 	}
-	static float loopNum = 0.0f;
+	// static float loopNum = 0.0f;
 	// lightPos = glm::vec3{0.8 * std::cos(loopNum), 2.0 * std::sin(loopNum), -1.8};
-	lightPos = glm::vec3{std::cos(loopNum), 2.3, std::sin(loopNum)};
-	loopNum += 0.05f;
-	if (loopNum > 10000.0f) {
-		loopNum = 0;
+	// lightPos = glm::vec3{std::cos(loopNum), 2.3, std::sin(loopNum)};
+	// loopNum += 0.05f;
+	// if (loopNum > 10000.0f) {
+	// 	loopNum = 0;
+	// }
+
+	for (int x = 0; x < WIDTH; x++) {
+		for (int y = 0; y < HEIGHT; y++) {
+			float x_cam = (x - static_cast<float>(WIDTH) / 2.0f) / (focalLength * 80);
+    		float y_cam = -(y - static_cast<float>(HEIGHT) / 2.0f) / (focalLength * 80);
+    		glm::vec3 dir_camera(x_cam, y_cam, -1.0f);
+			dir_camera = glm::normalize(dir_camera);
+    		glm::vec3 dir_world = dir_camera * glm::inverse(cameraOrientation);
+			auto intersection = getClosestIntersection(cameraPos, dir_world, model);
+			if (intersection.distanceFromCamera > 0.0) {
+				auto pos = intersection.intersectionPoint;
+				auto color = intersection.intersectedTriangle.colour;
+				auto dir_light = lightPos - pos; 
+				auto dist = glm::length(dir_light);
+				// auto proximityFactor = 600 / (4 * PI * dist * dist);
+				auto proximityFactor = std::min(888 / (3 * PI * dist * dist), 1.0f);
+				// auto ambientFactor = 0.2 * proximityFactor;
+				auto ambientFactor = 0.2;
+				if (lightVisible(intersection.intersectionPoint, lightPos, model, intersection.triangleIndex)) {
+					auto triangle = intersection.intersectedTriangle;
+					auto normal = triangle.normal;
+					auto reflectFactor = std::max(glm::dot(normal, glm::normalize(dir_light)), 0.0f);
+					// auto proximityFactor = 1000 / (6 * PI * dist * dist);
+					auto diffuseFactor = 0.6f * std::min(reflectFactor * proximityFactor, 1.0f);
+					// auto diffuseFactor = 0.01f * reflectFactor * proximityFactor;
+					auto h = glm::normalize((dir_world + dir_light)/glm::length(dir_light + dir_world));
+					auto exp = 16.0f;
+					auto specularFactor =  0.2f * std::pow(std::max(glm::dot(normal, h), 0.0f), exp) * proximityFactor;
+					auto lightFactor = diffuseFactor + specularFactor + ambientFactor;
+					// auto lightFactor = specularFactor + ambientFactor;
+					// auto lightFactor = diffuseFactor;
+					// auto lightFactor = specularFactor;
+					// Colour c{int(color.red), int(color.green), int(color.blue)};
+					// Colour c{int(color.red * highLightFactor), int(color.green * highLightFactor), int(color.blue * highLightFactor)};
+					// Colour c{int(color.red * factor + color.red * highLightFactor), int(color.green * factor + color.red * highLightFactor), int(color.blue * factor + color.red * highLightFactor)};
+					// Colour c{int(color.red * diffuseFactor), int(color.green * diffuseFactor), int(color.blue * diffuseFactor)};
+					// Colour c{int(std::min(color.red * lightFactor, double(255.0f))), int(std::min(color.green * lightFactor, double(255))), int(std::min(color.blue * lightFactor, double(255)))};
+					Colour c{int(color.red * lightFactor), int(color.green * lightFactor), int(color.blue * lightFactor)};
+					window.setPixelColour(x, y, packColor(c));
+				}else {
+					Colour c{int(color.red * ambientFactor), int(color.green * ambientFactor), int(color.blue * ambientFactor)};
+					window.setPixelColour(x, y, packColor(c));
+				}
+			}
+		}
+	}
+}
+
+void drawGouraudShading(DrawingWindow &window, const std::vector<ModelTriangle> &model) {
+	window.clearPixels();
+	if (orbit) {
+		auto angle = -glm::radians(0.2f);
+		auto r = Rotate(rotateAxis::Y_AXIS, angle);
+		cameraPos = cameraPos * r;
+		lookAt();
 	}
 
 	for (int x = 0; x < WIDTH; x++) {
@@ -524,29 +586,37 @@ void drawShadingScene(DrawingWindow &window, const std::vector<ModelTriangle> &m
 				auto color = intersection.intersectedTriangle.colour;
 				auto dir_light = lightPos - pos; 
 				auto dist = glm::length(dir_light);
-				auto proximityFactor = std::min(888 / (4 * PI * dist * dist), 1.0f);
-				auto ambientFactor = 0.2 * proximityFactor;
+				auto proximityFactor = std::min(888 / (3 * PI * dist * dist), 1.0f);
+				auto ambientFactor = 0.2;
 				if (lightVisible(intersection.intersectionPoint, lightPos, model, intersection.triangleIndex)) {
 					auto triangle = intersection.intersectedTriangle;
 					auto normal = triangle.normal;
+					//计算向量插值
+					auto triangleIndex = intersection.triangleIndex;
+					if (triangleIndex >= 0) {
+						auto verList = faceIndex2verInd[triangleIndex];
+						std::vector<int> faceList;
+						std::vector<glm::vec3> normalList;
+						for (const auto verIndex : verList) {
+							auto faceList = verInd2faceInd[verIndex];
+							//计算该顶点的平均法向量，为涉及该顶点的面法向量的平均
+							glm::vec3 averageNormal{0.0f, 0.0f, 0.0f};
+							for (const auto face : faceList) {
+								averageNormal += model[face].normal;
+							}
+							glm::normalize(averageNormal);
+							normalList.emplace_back(averageNormal);
+						}
+
+						auto bcCoord = barycentric(triangle.vertices[0], triangle.vertices[1], triangle.vertices[2], intersection.intersectionPoint);
+						normal = glm::normalize(normalList[0] * bcCoord[0] + normalList[1] * bcCoord[1] + normalList[2] * bcCoord[2]);
+					}
 					auto reflectFactor = std::max(glm::dot(normal, glm::normalize(dir_light)), 0.0f);
-					// auto proximityFactor = 1000 / (6 * PI * dist * dist);
-					auto diffuseFactor = 0.5f * std::min(reflectFactor * proximityFactor, 1.0f);
+					auto diffuseFactor = 0.6f * std::min(reflectFactor * proximityFactor, 1.0f);
 					auto h = glm::normalize((dir_world + dir_light)/glm::length(dir_light + dir_world));
 					auto exp = 16.0f;
-					auto specularFactor =  0.3f * std::pow(std::max(glm::dot(normal, h), 0.0f), exp) * proximityFactor;
+					auto specularFactor =  0.2f * std::pow(std::max(glm::dot(normal, h), 0.0f), exp) * proximityFactor;
 					auto lightFactor = diffuseFactor + specularFactor + ambientFactor;
-					// auto lightFactor = diffuseFactor;
-					// auto lightFactor = specularFactor;
-
-					// if ( lightFactor > 1.0f) {
-					// 	std::cout << diffuseFactor << ", " << specularFactor << ", " << lightFactor << std::endl;
-					// }
-
-					// Colour c{int(color.red * factor), int(color.green * factor), int(color.blue * factor)};
-					// Colour c{int(color.red * highLightFactor), int(color.green * highLightFactor), int(color.blue * highLightFactor)};
-					// Colour c{int(color.red * factor + color.red * highLightFactor), int(color.green * factor + color.red * highLightFactor), int(color.blue * factor + color.red * highLightFactor)};
-					// Colour c{int(color.red * diffuseFactor), int(color.green * diffuseFactor), int(color.blue * diffuseFactor)};
 					Colour c{int(color.red * lightFactor), int(color.green * lightFactor), int(color.blue * lightFactor)};
 					window.setPixelColour(x, y, packColor(c));
 				}else {
@@ -581,6 +651,9 @@ void draw(DrawingWindow &window, const std::vector<ModelTriangle> &model) {
 	case DisplayModel::SHADING:
 		drawShadingScene(window, model);
 		break;
+	case DisplayModel::GOURAUD_SHADING:
+		drawGouraudShading(window, model);
+		break;
 	default:
 		break;
 	}
@@ -593,7 +666,11 @@ int main(int argc, char *argv[]) {
 	DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
 	SDL_Event event;
 	std::vector<CanvasTriangle> triangles;
-	auto model = parseOBJ2ModelTriangle("models/cornell-box.obj", "models/cornell-box.mtl");
+	// auto model = parseOBJ2ModelTriangle("models/cornell-box.obj", "models/cornell-box.mtl");
+	auto model = parseOBJ2ModelTriangle("models/sphere.obj", "models/cornell-box.mtl");
+	auto [ver2face, face2ver] = createVertex2FaceIndex("models/sphere.obj");
+	verInd2faceInd = std::move(ver2face);
+	faceIndex2verInd = std::move(face2ver);
 	while (true) {
 		// We MUST poll for events - otherwise the window will freeze !
 		if (window.pollForInputEvents(event)) handleEvent(event, window);

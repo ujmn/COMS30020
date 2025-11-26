@@ -240,6 +240,15 @@ std::vector<float> barycentric(const CanvasPoint &A, const CanvasPoint &B, const
 	return res;
 }
 
+std::vector<float> barycentric(const glm::vec3 &A, const glm::vec3 &B, const glm::vec3 &C, const glm::vec3 &P) {
+	const CanvasPoint a{A.x, A.y};
+	const CanvasPoint b{B.x, B.y};
+	const CanvasPoint c{C.x, C.y};
+	const CanvasPoint p{P.x, P.y};
+
+	return barycentric(a, b, c, p);
+}
+
 std::tuple<std::vector<glm::vec3>, std::vector<glm::ivec3>> parseOBJ(std::string fileName) {
 	std::ifstream file{fileName, std::ios::in};
 	std::vector<glm::vec3> vertics;
@@ -265,6 +274,41 @@ std::tuple<std::vector<glm::vec3>, std::vector<glm::ivec3>> parseOBJ(std::string
 	}
 
 	return {vertics, faces};
+}
+
+decltype(auto) createVertex2FaceIndex(std::string modelFile) {
+	std::ifstream file{modelFile, std::ios::in};
+	if (!file.is_open())
+    {
+        std::cerr << "Failed to open file: " << modelFile << '\n';
+    }
+
+	int verIndex = 0;
+	int faceIndex = 0;
+	std::vector<std::vector<int>> verInd2faceInd;
+	std::vector<std::vector<int>> faceIndex2verInd;
+	for (std::string str; std::getline(file, str);) {
+		if (!str.empty()) {
+			if(str.front() == 'v') {
+				// std::vector<std::string> lineList = split(str, ' ');		
+				// glm::vec3 vertic{std::stof(lineList[1]), std::stof(lineList[2]), std::stof(lineList[3])};
+				verInd2faceInd.emplace_back(std::vector<int>{});
+			}else if (str.front() == 'f') {
+				faceIndex2verInd.emplace_back(std::vector<int>{});
+				std::vector<std::string> lineList = split(str, ' ');		
+				// glm::ivec3 face{std::stoi(lineList[1]), std::stoi(lineList[2]), std::stoi(lineList[3])};
+				verInd2faceInd[std::stoi(lineList[1]) - 1].emplace_back(faceIndex);
+				verInd2faceInd[std::stoi(lineList[2]) - 1].emplace_back(faceIndex);
+				verInd2faceInd[std::stoi(lineList[3]) - 1].emplace_back(faceIndex);
+				faceIndex2verInd[faceIndex].emplace_back(std::stoi(lineList[1]) - 1);
+				faceIndex2verInd[faceIndex].emplace_back(std::stoi(lineList[2]) - 1);
+				faceIndex2verInd[faceIndex].emplace_back(std::stoi(lineList[3]) - 1);
+				faceIndex++;
+			}
+		}
+	}
+
+	return std::tuple<std::vector<std::vector<int>>, std::vector<std::vector<int>>>{verInd2faceInd, faceIndex2verInd};
 }
 
 std::vector<ModelTriangle> parseOBJ2ModelTriangle(std::string model, std::string mtl) {
@@ -315,6 +359,10 @@ std::vector<ModelTriangle> parseOBJ2ModelTriangle(std::string model, std::string
 			}else if (str.front() == 'f') {
 				std::vector<std::string> lineList = split(str, ' ');		
 				glm::ivec3 face{std::stoi(lineList[1]), std::stoi(lineList[2]), std::stoi(lineList[3])};
+				if (colorName.empty()) {
+					colorName = "Red";
+				}
+				color = str2color[colorName];
 				auto c = unpackColor(color);
 				c.name = colorName;
 				ModelTriangle mt{vertics[face.x-1], vertics[face.y-1], vertics[face.z-1], c};
