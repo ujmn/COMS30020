@@ -31,7 +31,8 @@ enum class DisplayModel : short {
 	RASTERISED,
 	RAY_TRACED,
 	SHADING,
-	GOURAUD_SHADING
+	GOURAUD_SHADING,
+	PHONG
 };
 
 DisplayModel displayModel{DisplayModel::POINT_CLOUND};
@@ -51,6 +52,7 @@ std::vector<std::tuple<CanvasTriangle, Colour>> triangles;
 float zbuffer[WIDTH * HEIGHT]{0.0};
 std::vector<std::vector<int>> verInd2faceInd;
 std::vector<std::vector<int>> faceIndex2verInd;
+std::vector<glm::vec3> vertexNormal;
 
 bool orbit = false;
 
@@ -417,6 +419,10 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 				break;
 
 			case DisplayModel::GOURAUD_SHADING:
+				displayModel = DisplayModel::PHONG;
+				break;
+
+			case DisplayModel::PHONG:
 				displayModel = DisplayModel::POINT_CLOUND;
 				break;
 			default:
@@ -573,6 +579,68 @@ void drawGouraudShading(DrawingWindow &window, const std::vector<ModelTriangle> 
 		lookAt();
 	}
 
+	decltype(auto) calculateLight = [](float proximityFactor, glm::vec3 normal, double ambientFactor, glm::vec3 dir_light, glm::vec3 dir_world){
+		auto reflectFactor = std::max(glm::dot(normal, glm::normalize(dir_light)), 0.0f);
+		auto diffuseFactor = 0.6f * std::min(reflectFactor * proximityFactor, 1.0f);
+		auto h = glm::normalize((dir_world + dir_light)/glm::length(dir_light + dir_world));
+		auto exp = 16.0f;
+		auto specularFactor =  0.2f * std::pow(std::max(glm::dot(normal, h), 0.0f), exp) * proximityFactor;
+		auto lightFactor = diffuseFactor + specularFactor + ambientFactor;
+
+		return lightFactor;
+	}; 
+
+	for (int x = 0; x < WIDTH; x++) {
+		for (int y = 0; y < HEIGHT; y++) {
+			float x_cam = (x - static_cast<float>(WIDTH) / 2.0f) / (focalLength * 80);
+    		float y_cam = -(y - static_cast<float>(HEIGHT) / 2.0f) / (focalLength * 80);
+    		glm::vec3 dir_camera(x_cam, y_cam, -1.0f);
+			dir_camera = glm::normalize(dir_camera);
+    		glm::vec3 dir_world = dir_camera * glm::inverse(cameraOrientation);
+			auto intersection = getClosestIntersection(cameraPos, dir_world, model);
+			if (intersection.distanceFromCamera > 0.0) {
+				auto pos = intersection.intersectionPoint;
+				auto color = intersection.intersectedTriangle.colour;
+				auto dir_light = lightPos - pos; 
+				auto dist = glm::length(dir_light);
+				auto proximityFactor = std::min(888 / (3 * PI * dist * dist), 1.0f);
+				auto ambientFactor = 0.2;
+				if (lightVisible(intersection.intersectionPoint, lightPos, model, intersection.triangleIndex)) {
+					auto triangle = intersection.intersectedTriangle;
+					auto normal = triangle.normal;
+					auto triangleIndex = intersection.triangleIndex;
+					auto lightFactor = 1.0;
+					Colour color_w{0, 0, 0};
+					if (triangleIndex >= 0) {
+						auto verList = faceIndex2verInd[triangleIndex];
+						auto bcCoord = barycentric(triangle.vertices[0], triangle.vertices[1], triangle.vertices[2], intersection.intersectionPoint);
+						auto lightFactor_1 = calculateLight(proximityFactor, vertexNormal[verList[0]], ambientFactor, dir_light, dir_world);
+						auto lightFactor_2 = calculateLight(proximityFactor, vertexNormal[verList[1]], ambientFactor, dir_light, dir_world);
+						auto lightFactor_3 = calculateLight(proximityFactor, vertexNormal[verList[2]], ambientFactor, dir_light, dir_world);
+						Colour c_1{int(color.red * lightFactor_1), int(color.green * lightFactor_1), int(color.blue * lightFactor_1)};
+						Colour c_2{int(color.red * lightFactor_2), int(color.green * lightFactor_2), int(color.blue * lightFactor_2)};
+						Colour c_3{int(color.red * lightFactor_3), int(color.green * lightFactor_3), int(color.blue * lightFactor_3)};
+						color_w = c_1 * bcCoord[0] + c_2 * bcCoord[1] + c_3 * bcCoord[2];
+					}
+					window.setPixelColour(x, y, packColor(color_w));
+				}else {
+					Colour c{int(color.red * ambientFactor), int(color.green * ambientFactor), int(color.blue * ambientFactor)};
+					window.setPixelColour(x, y, packColor(c));
+				}
+			}
+		}
+	}
+}
+
+void drawPhongShading(DrawingWindow &window, const std::vector<ModelTriangle> &model) {
+	window.clearPixels();
+	if (orbit) {
+		auto angle = -glm::radians(0.2f);
+		auto r = Rotate(rotateAxis::Y_AXIS, angle);
+		cameraPos = cameraPos * r;
+		lookAt();
+	}
+
 	for (int x = 0; x < WIDTH; x++) {
 		for (int y = 0; y < HEIGHT; y++) {
 			float x_cam = (x - static_cast<float>(WIDTH) / 2.0f) / (focalLength * 80);
@@ -595,21 +663,8 @@ void drawGouraudShading(DrawingWindow &window, const std::vector<ModelTriangle> 
 					auto triangleIndex = intersection.triangleIndex;
 					if (triangleIndex >= 0) {
 						auto verList = faceIndex2verInd[triangleIndex];
-						std::vector<int> faceList;
-						std::vector<glm::vec3> normalList;
-						for (const auto verIndex : verList) {
-							auto faceList = verInd2faceInd[verIndex];
-							//计算该顶点的平均法向量，为涉及该顶点的面法向量的平均
-							glm::vec3 averageNormal{0.0f, 0.0f, 0.0f};
-							for (const auto face : faceList) {
-								averageNormal += model[face].normal;
-							}
-							glm::normalize(averageNormal);
-							normalList.emplace_back(averageNormal);
-						}
-
 						auto bcCoord = barycentric(triangle.vertices[0], triangle.vertices[1], triangle.vertices[2], intersection.intersectionPoint);
-						normal = glm::normalize(normalList[0] * bcCoord[0] + normalList[1] * bcCoord[1] + normalList[2] * bcCoord[2]);
+						normal = glm::normalize(vertexNormal[verList[0]] * bcCoord[0] + vertexNormal[verList[1]] * bcCoord[1] + vertexNormal[verList[2]] * bcCoord[2]);
 					}
 					auto reflectFactor = std::max(glm::dot(normal, glm::normalize(dir_light)), 0.0f);
 					auto diffuseFactor = 0.6f * std::min(reflectFactor * proximityFactor, 1.0f);
@@ -654,6 +709,9 @@ void draw(DrawingWindow &window, const std::vector<ModelTriangle> &model) {
 	case DisplayModel::GOURAUD_SHADING:
 		drawGouraudShading(window, model);
 		break;
+	case DisplayModel::PHONG:
+		drawPhongShading(window, model);
+		break;
 	default:
 		break;
 	}
@@ -671,6 +729,7 @@ int main(int argc, char *argv[]) {
 	auto [ver2face, face2ver] = createVertex2FaceIndex("models/sphere.obj");
 	verInd2faceInd = std::move(ver2face);
 	faceIndex2verInd = std::move(face2ver);
+	vertexNormal = std::move(calculateVertexNormal(verInd2faceInd, faceIndex2verInd, model));
 	while (true) {
 		// We MUST poll for events - otherwise the window will freeze !
 		if (window.pollForInputEvents(event)) handleEvent(event, window);

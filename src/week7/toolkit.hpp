@@ -39,6 +39,15 @@ Colour unpackColor(uint32_t color) {
 	return c;
 }
 
+Colour operator*(Colour color, float num) {
+	return Colour{int(color.red * num), int(color.green * num), int(color.blue *num)};
+}
+
+Colour operator+(Colour lhs, Colour rhs){
+	return Colour{lhs.red + rhs.red, lhs.green + rhs.green, lhs.blue + rhs.blue};
+}
+
+
 std::vector<float> interpolateSingleFloats(float from, float to, int numberOfValues) {
 	std::vector<float> ret;
 	float num = (to - from) / (float)(numberOfValues - 1);
@@ -266,7 +275,7 @@ std::tuple<std::vector<glm::vec3>, std::vector<glm::ivec3>> parseOBJ(std::string
 				glm::vec3 vertic{std::stof(lineList[1]), std::stof(lineList[2]), std::stof(lineList[3])};
 				vertics.emplace_back(vertic);
 			}else if (str.front() == 'f') {
-				std::vector<std::string> lineList = split(str, ' ');		
+				std::vector<std::string> lineList = split(str, ' ');
 				glm::ivec3 face{std::stoi(lineList[1]), std::stoi(lineList[2]), std::stoi(lineList[3])};
 				faces.emplace_back(face);
 			}
@@ -290,13 +299,10 @@ decltype(auto) createVertex2FaceIndex(std::string modelFile) {
 	for (std::string str; std::getline(file, str);) {
 		if (!str.empty()) {
 			if(str.front() == 'v') {
-				// std::vector<std::string> lineList = split(str, ' ');		
-				// glm::vec3 vertic{std::stof(lineList[1]), std::stof(lineList[2]), std::stof(lineList[3])};
 				verInd2faceInd.emplace_back(std::vector<int>{});
 			}else if (str.front() == 'f') {
 				faceIndex2verInd.emplace_back(std::vector<int>{});
 				std::vector<std::string> lineList = split(str, ' ');		
-				// glm::ivec3 face{std::stoi(lineList[1]), std::stoi(lineList[2]), std::stoi(lineList[3])};
 				verInd2faceInd[std::stoi(lineList[1]) - 1].emplace_back(faceIndex);
 				verInd2faceInd[std::stoi(lineList[2]) - 1].emplace_back(faceIndex);
 				verInd2faceInd[std::stoi(lineList[3]) - 1].emplace_back(faceIndex);
@@ -308,7 +314,26 @@ decltype(auto) createVertex2FaceIndex(std::string modelFile) {
 		}
 	}
 
+
+
 	return std::tuple<std::vector<std::vector<int>>, std::vector<std::vector<int>>>{verInd2faceInd, faceIndex2verInd};
+}
+
+std::vector<glm::vec3> calculateVertexNormal(const std::vector<std::vector<int>> &verInd2faceInd, const std::vector<std::vector<int>> &faceInd2verInd, const std::vector<ModelTriangle> &model) {
+	std::vector<glm::vec3> normalArr(verInd2faceInd.size(), glm::vec3{});
+
+	for (int i = 0; i < verInd2faceInd.size(); i++) {
+		auto faceList = verInd2faceInd[i];
+		glm::vec3 aveNormal{0.0f, 0.0f, 0.0f};
+		for (const auto face : faceList) {
+			aveNormal += model[face].normal;
+		}
+
+		aveNormal = glm::normalize(aveNormal);
+		normalArr[i] = aveNormal;
+	}
+
+	return normalArr;
 }
 
 std::vector<ModelTriangle> parseOBJ2ModelTriangle(std::string model, std::string mtl) {
