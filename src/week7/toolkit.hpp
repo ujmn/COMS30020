@@ -9,16 +9,16 @@
 #include <RayTriangleIntersection.h>
 #include <cassert>
 #include <limits>
+#include <cmath>
+#include <algorithm>
+
 
 // const int WIDTH = 1280;
 // const int HEIGHT = 960;
 const int WIDTH = 640;
 const int HEIGHT = 480;
 glm::mat3 cameraOrientation;
-
-
 extern float zbuffer[WIDTH * HEIGHT];
-
 
 enum class rotateAxis{
 	X_AXIS,
@@ -38,6 +38,64 @@ Colour unpackColor(uint32_t color) {
 
 	return c;
 }
+
+// 同心映射：将 [0,1)^2 -> 单位圆盘 (返回 {dx, dz})
+glm::vec3 squareToDiskConcentricXZ(double u, double v) {
+    double ux = 2.0 * u - 1.0; // [-1, 1)
+    double uz = 2.0 * v - 1.0;
+
+    if (ux == 0.0 && uz == 0.0) {
+        return glm::vec3(0.0, 0.0, 0.0); // y 分量无意义，设为 0
+    }
+
+    double r, theta;
+    if (std::abs(ux) > std::abs(uz)) {
+        r = ux;
+        theta = (M_PI / 4.0) * (uz / ux);
+    } else {
+        r = uz;
+        theta = (M_PI / 2.0) - (M_PI / 4.0) * (ux / uz);
+    }
+
+    double dx = r * std::cos(theta);
+    double dz = r * std::sin(theta);
+    return glm::vec3(dx, 0.0, dz); // y = 0，仅表示偏移
+}
+
+// 在 XZ 平面上的圆盘内确定性采样 N 个点
+std::vector<glm::vec3> sampleDiskOnXZPlane(
+    const glm::vec3& center, 
+    double radius, 
+    int numSamples
+) {
+    if (numSamples <= 0) return {};
+
+    int n = static_cast<int>(std::ceil(std::sqrt(numSamples)));
+    std::vector<glm::vec3> samples;
+    samples.reserve(numSamples);
+
+    for (int i = 0; i < n * n && samples.size() < numSamples; ++i) {
+        int ix = i % n;
+        int iz = i / n;
+
+        double u = (ix + 0.5) / n; // [0,1)
+        double v = (iz + 0.5) / n;
+
+        // 映射到单位圆盘（XZ 偏移）
+        glm::vec3 offset = squareToDiskConcentricXZ(u, v);
+
+        // 缩放并平移到目标位置
+        glm::vec3 point;
+        point.x = center.x + radius * offset.x;
+        point.y = center.y;
+        point.z = center.z + radius * offset.z;
+
+        samples.push_back(point);
+    }
+
+    return samples;
+}
+
 
 Colour operator*(Colour color, float num) {
 	return Colour{int(color.red * num), int(color.green * num), int(color.blue *num)};
@@ -256,6 +314,56 @@ std::vector<float> barycentric(const glm::vec3 &A, const glm::vec3 &B, const glm
 	const CanvasPoint p{P.x, P.y};
 
 	return barycentric(a, b, c, p);
+}
+
+std::vector<float> TDBarycentric(const glm::vec3 &A, const glm::vec3 &B, const glm::vec3 &C, const glm::vec3 &P) {
+	const float EPSILON = 1e-6f;
+    std::vector<float> res(3, 0.0f); // 初始化结果为(0,0,0)
+
+    // 1. 构建三角形局部坐标系的基向量（GLM直接支持向量减法）
+    glm::vec3 v1 = A - C;  // 向量C->A
+    glm::vec3 v2 = B - C;  // 向量C->B
+    glm::vec3 p = P - C;   // 向量C->P
+
+    // 2. 校验三角形是否退化（三点共线）：叉乘模长平方为0则共线
+    glm::vec3 crossV1V2 = glm::cross(v1, v2);
+    float crossLenSq = glm::dot(crossV1V2, crossV1V2); // 模长平方（避免开方）
+    if (crossLenSq < EPSILON * EPSILON) {
+        std::cerr << "Error: 三点共线，无法构成三角形！" << std::endl;
+        return res; // 退化三角形返回(0,0,0)
+    }
+
+    // 3. 校验点P是否在三角形所在平面内
+    float planeDot = glm::dot(p, crossV1V2);
+    if (std::fabs(planeDot) > EPSILON) {
+        std::cerr << "Warning: 点P不在三角形平面内，结果为近似值！" << std::endl;
+        // 若需要严格校验，可直接返回(0,0,0)：return res;
+    }
+
+    // 4. 解线性方程组求重心坐标（GLM直接支持点乘）
+    float a = glm::dot(v1, v1);  // v1·v1
+    float b = glm::dot(v1, v2);  // v1·v2
+    float c = glm::dot(v2, v2);  // v2·v2
+    float d = glm::dot(p, v1);   // p·v1
+    float e = glm::dot(p, v2);   // p·v2
+
+    float denominator = a * c - b * b; // 方程组分母
+    if (std::fabs(denominator) < EPSILON) {
+        std::cerr << "Error: 计算分母为0，无法求解！" << std::endl;
+        return res;
+    }
+
+    // 计算三个重心坐标分量
+    float lambda1 = (d * c - b * e) / denominator; // 对应顶点A的权重
+    float lambda2 = (a * e - b * d) / denominator; // 对应顶点B的权重
+    float lambda3 = 1.0f - lambda1 - lambda2;      // 对应顶点C的权重
+
+    // 赋值结果
+    res[0] = lambda1;
+    res[1] = lambda2;
+    res[2] = lambda3;
+
+    return res;
 }
 
 std::tuple<std::vector<glm::vec3>, std::vector<glm::ivec3>> parseOBJ(std::string fileName) {

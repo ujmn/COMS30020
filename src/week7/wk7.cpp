@@ -30,7 +30,9 @@ enum class DisplayModel : short {
 	WIRE_FRAME,
 	RASTERISED,
 	RAY_TRACED,
+	SOFT_RAY_TRACED,
 	SHADING,
+	SOFT_SHADING,
 	GOURAUD_SHADING,
 	PHONG
 };
@@ -42,9 +44,9 @@ glm::vec3 forward{0.0, 0.0, 1.0};
 // glm::vec3 lightPos{0.0, 2.0, 0.0};
 // glm::vec3 lightPos( -0.64901096, 1.839334, 0.532032);
 // glm::vec3 lightPos{0.1, 2.0, 0.1};
-// glm::vec3 lightPos(0.001f, 2.3389f, 0.007f);
+// glm::vec3 lightPos(0.001f, 2.3389f, 0.007f); 	//康奈尔盒子的灯光坐标
 
-glm::vec3 lightPos(0.001f, 3.7389f, 5.207f);
+glm::vec3 lightPos(0.001f, 3.7389f, 5.207f);	//球的灯坐标
 
 glm::vec3 cameraPos{0.0, 0.0, 15.0};
 float focalLength{10.0};
@@ -53,6 +55,8 @@ float zbuffer[WIDTH * HEIGHT]{0.0};
 std::vector<std::vector<int>> verInd2faceInd;
 std::vector<std::vector<int>> faceIndex2verInd;
 std::vector<glm::vec3> vertexNormal;
+constexpr int sampleTime = 16;
+std::vector<glm::vec3> samplePos;				
 
 bool orbit = false;
 
@@ -411,10 +415,18 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 				break;
 
 			case DisplayModel::RAY_TRACED:
+				displayModel = DisplayModel::SOFT_RAY_TRACED;
+				break;
+
+			case DisplayModel::SOFT_RAY_TRACED:
 				displayModel = DisplayModel::SHADING;
 				break;
 
 			case DisplayModel::SHADING:
+				displayModel = DisplayModel::SOFT_SHADING;
+				break;
+
+			case DisplayModel::SOFT_SHADING:
 				displayModel = DisplayModel::GOURAUD_SHADING;
 				break;
 
@@ -507,6 +519,40 @@ void drawRayTracShadowScene(DrawingWindow &window, const std::vector<ModelTriang
 	}
 }
 
+void drawSoftRayTracShadowScene(DrawingWindow &window, const std::vector<ModelTriangle> &model) {
+	window.clearPixels();
+	if (orbit) {
+		auto angle = -glm::radians(0.2f);
+		auto r = Rotate(rotateAxis::Y_AXIS, angle);
+		cameraPos = cameraPos * r;
+		lookAt();
+	}
+
+	auto black = packColor(Colour{0, 0, 0});
+	for (int x = 0; x < WIDTH; x++) {
+		for (int y = 0; y < HEIGHT; y++) {
+			float x_cam = (x - static_cast<float>(WIDTH) / 2.0f) / (focalLength * 80);
+    		float y_cam = -(y - static_cast<float>(HEIGHT) / 2.0f) / (focalLength * 80);
+    		glm::vec3 dir_camera(x_cam, y_cam, -1.0f);
+			dir_camera = glm::normalize(dir_camera);
+    		glm::vec3 dir_world = cameraOrientation * dir_camera;
+			auto intersection = getClosestIntersection(cameraPos, dir_world, model);
+			if (intersection.distanceFromCamera > 0.0) {
+				auto color = intersection.intersectedTriangle.colour;
+				int hitTime = 0;
+				for (const auto &pos : samplePos) {
+					if (lightVisible(intersection.intersectionPoint, pos, model, intersection.triangleIndex)) {
+						hitTime++;
+					}
+				}
+				float shadingFactor = float(hitTime) / float(sampleTime);
+				Colour c{int(color.red * shadingFactor), int(color.green * shadingFactor), int(color.blue * shadingFactor)};
+				window.setPixelColour(x, y, packColor(c));
+			}
+		}
+	}
+}
+
 void drawShadingScene(DrawingWindow &window, const std::vector<ModelTriangle> &model) {
 	window.clearPixels();
 	if (orbit) {
@@ -570,6 +616,63 @@ void drawShadingScene(DrawingWindow &window, const std::vector<ModelTriangle> &m
 	}
 }
 
+void drawSoftShadingScene(DrawingWindow &window, const std::vector<ModelTriangle> &model) {
+	window.clearPixels();
+	if (orbit) {
+		auto angle = -glm::radians(0.2f);
+		auto r = Rotate(rotateAxis::Y_AXIS, angle);
+		cameraPos = cameraPos * r;
+		lookAt();
+	}
+
+	for (int x = 0; x < WIDTH; x++) {
+		for (int y = 0; y < HEIGHT; y++) {
+			float x_cam = (x - static_cast<float>(WIDTH) / 2.0f) / (focalLength * 80);
+    		float y_cam = -(y - static_cast<float>(HEIGHT) / 2.0f) / (focalLength * 80);
+    		glm::vec3 dir_camera(x_cam, y_cam, -1.0f);
+			dir_camera = glm::normalize(dir_camera);
+    		glm::vec3 dir_world = dir_camera * glm::inverse(cameraOrientation);
+			auto intersection = getClosestIntersection(cameraPos, dir_world, model);
+			if (intersection.distanceFromCamera > 0.0) {
+				auto pos = intersection.intersectionPoint;
+				auto color = intersection.intersectedTriangle.colour;
+				auto dir_light = lightPos - pos; 
+				auto dist = glm::length(dir_light);
+				auto proximityFactor = std::min(888 / (3 * PI * dist * dist), 1.0f);
+				auto ambientFactor = 0.2;
+
+				int hitTime = 0;
+				for (const auto &pos : samplePos) {
+					if (lightVisible(intersection.intersectionPoint, pos, model, intersection.triangleIndex)) {
+						hitTime++;
+					}
+				}
+
+				float shadingFactor = float(hitTime) / float(sampleTime);
+				// Colour c{int(color.red * shadingFactor), int(color.green * shadingFactor), int(color.blue * shadingFactor)};
+				// window.setPixelColour(x, y, packColor(c));
+
+				if (lightVisible(intersection.intersectionPoint, lightPos, model, intersection.triangleIndex)) {
+					auto triangle = intersection.intersectedTriangle;
+					auto normal = triangle.normal;
+					auto reflectFactor = std::max(glm::dot(normal, glm::normalize(dir_light)), 0.0f);
+					auto diffuseFactor = 0.6f * std::min(reflectFactor * proximityFactor, 1.0f);
+					auto h = glm::normalize((dir_world + dir_light)/glm::length(dir_light + dir_world));
+					auto exp = 16.0f;
+					auto specularFactor =  0.2f * std::pow(std::max(glm::dot(normal, h), 0.0f), exp) * proximityFactor;
+					auto lightFactor = (diffuseFactor + specularFactor + ambientFactor) * shadingFactor;
+					Colour c{int(color.red * lightFactor), int(color.green * lightFactor), int(color.blue * lightFactor)};
+					window.setPixelColour(x, y, packColor(c));
+				}else {
+					Colour c{int(color.red * ambientFactor), int(color.green * ambientFactor), int(color.blue * ambientFactor)};
+					window.setPixelColour(x, y, packColor(c));
+				}
+			}
+		}
+	}
+}
+
+
 void drawGouraudShading(DrawingWindow &window, const std::vector<ModelTriangle> &model) {
 	window.clearPixels();
 	if (orbit) {
@@ -613,14 +716,18 @@ void drawGouraudShading(DrawingWindow &window, const std::vector<ModelTriangle> 
 					Colour color_w{0, 0, 0};
 					if (triangleIndex >= 0) {
 						auto verList = faceIndex2verInd[triangleIndex];
-						auto bcCoord = barycentric(triangle.vertices[0], triangle.vertices[1], triangle.vertices[2], intersection.intersectionPoint);
-						auto lightFactor_1 = calculateLight(proximityFactor, vertexNormal[verList[0]], ambientFactor, dir_light, dir_world);
-						auto lightFactor_2 = calculateLight(proximityFactor, vertexNormal[verList[1]], ambientFactor, dir_light, dir_world);
-						auto lightFactor_3 = calculateLight(proximityFactor, vertexNormal[verList[2]], ambientFactor, dir_light, dir_world);
-						Colour c_1{int(color.red * lightFactor_1), int(color.green * lightFactor_1), int(color.blue * lightFactor_1)};
-						Colour c_2{int(color.red * lightFactor_2), int(color.green * lightFactor_2), int(color.blue * lightFactor_2)};
-						Colour c_3{int(color.red * lightFactor_3), int(color.green * lightFactor_3), int(color.blue * lightFactor_3)};
-						color_w = c_1 * bcCoord[0] + c_2 * bcCoord[1] + c_3 * bcCoord[2];
+						auto bcCoord = TDBarycentric(triangle.vertices[0], triangle.vertices[1], triangle.vertices[2], intersection.intersectionPoint);
+						// if (bcCoord[0] + bcCoord[1] + bcCoord[2] == 1) {
+							auto lightFactor_1 = calculateLight(proximityFactor, vertexNormal[verList[0]], ambientFactor, dir_light, dir_world);
+							auto lightFactor_2 = calculateLight(proximityFactor, vertexNormal[verList[1]], ambientFactor, dir_light, dir_world);
+							auto lightFactor_3 = calculateLight(proximityFactor, vertexNormal[verList[2]], ambientFactor, dir_light, dir_world);
+							Colour c_1{int(color.red * lightFactor_1), int(color.green * lightFactor_1), int(color.blue * lightFactor_1)};
+							Colour c_2{int(color.red * lightFactor_2), int(color.green * lightFactor_2), int(color.blue * lightFactor_2)};
+							Colour c_3{int(color.red * lightFactor_3), int(color.green * lightFactor_3), int(color.blue * lightFactor_3)};
+							color_w = c_1 * bcCoord[0] + c_2 * bcCoord[1] + c_3 * bcCoord[2];
+						// }else{
+						// 	std::cout << "invalid bary centric" << std::endl;
+						// }
 					}
 					window.setPixelColour(x, y, packColor(color_w));
 				}else {
@@ -663,7 +770,7 @@ void drawPhongShading(DrawingWindow &window, const std::vector<ModelTriangle> &m
 					auto triangleIndex = intersection.triangleIndex;
 					if (triangleIndex >= 0) {
 						auto verList = faceIndex2verInd[triangleIndex];
-						auto bcCoord = barycentric(triangle.vertices[0], triangle.vertices[1], triangle.vertices[2], intersection.intersectionPoint);
+						auto bcCoord = TDBarycentric(triangle.vertices[0], triangle.vertices[1], triangle.vertices[2], intersection.intersectionPoint);
 						normal = glm::normalize(vertexNormal[verList[0]] * bcCoord[0] + vertexNormal[verList[1]] * bcCoord[1] + vertexNormal[verList[2]] * bcCoord[2]);
 					}
 					auto reflectFactor = std::max(glm::dot(normal, glm::normalize(dir_light)), 0.0f);
@@ -703,15 +810,26 @@ void draw(DrawingWindow &window, const std::vector<ModelTriangle> &model) {
 		drawRayTracShadowScene(window, model);
 		break;
 
+	case DisplayModel::SOFT_RAY_TRACED:
+		drawSoftRayTracShadowScene(window, model);
+		break;
+
 	case DisplayModel::SHADING:
 		drawShadingScene(window, model);
 		break;
+
+	case DisplayModel::SOFT_SHADING:
+		drawSoftShadingScene(window, model);
+		break;
+
 	case DisplayModel::GOURAUD_SHADING:
 		drawGouraudShading(window, model);
 		break;
+		
 	case DisplayModel::PHONG:
 		drawPhongShading(window, model);
 		break;
+
 	default:
 		break;
 	}
@@ -724,12 +842,17 @@ int main(int argc, char *argv[]) {
 	DrawingWindow window = DrawingWindow(WIDTH, HEIGHT, false);
 	SDL_Event event;
 	std::vector<CanvasTriangle> triangles;
+	// auto model = parseOBJ2ModelTriangle("models/cornell-box_separate.obj", "models/cornell-box.mtl");
 	// auto model = parseOBJ2ModelTriangle("models/cornell-box.obj", "models/cornell-box.mtl");
+	// auto model = parseOBJ2ModelTriangle("models/cornell-no-box.obj", "models/cornell-box.mtl");
 	auto model = parseOBJ2ModelTriangle("models/sphere.obj", "models/cornell-box.mtl");
 	auto [ver2face, face2ver] = createVertex2FaceIndex("models/sphere.obj");
+	// auto [ver2face, face2ver] = createVertex2FaceIndex("models/cornell-box.obj");
+	// auto [ver2face, face2ver] = createVertex2FaceIndex("models/cornell-no-box.obj");
 	verInd2faceInd = std::move(ver2face);
 	faceIndex2verInd = std::move(face2ver);
 	vertexNormal = std::move(calculateVertexNormal(verInd2faceInd, faceIndex2verInd, model));
+ 	samplePos = sampleDiskOnXZPlane(lightPos, 0.25, sampleTime);
 	while (true) {
 		// We MUST poll for events - otherwise the window will freeze !
 		if (window.pollForInputEvents(event)) handleEvent(event, window);
