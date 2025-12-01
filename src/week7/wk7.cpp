@@ -34,10 +34,11 @@ enum class DisplayModel : short {
 	SHADING,
 	SOFT_SHADING,
 	GOURAUD_SHADING,
-	PHONG
+	PHONG,
+	MIRROE
 };
 
-DisplayModel displayModel{DisplayModel::POINT_CLOUND};
+DisplayModel displayModel{DisplayModel::MIRROE};
 glm::vec3 right{1.0, 0.0, 0.0};
 glm::vec3 up{0.0, 1.0, 0.0};
 glm::vec3 forward{0.0, 0.0, 1.0};
@@ -45,8 +46,9 @@ glm::vec3 forward{0.0, 0.0, 1.0};
 // glm::vec3 lightPos( -0.64901096, 1.839334, 0.532032);
 // glm::vec3 lightPos{0.1, 2.0, 0.1};
 // glm::vec3 lightPos(0.001f, 2.3389f, 0.007f); 	//康奈尔盒子的灯光坐标
+glm::vec3 lightPos(0.001f, 2.3389f, 1.507f); 	//康奈尔盒子的灯光坐标
 
-glm::vec3 lightPos(0.001f, 3.7389f, 5.207f);	//球的灯坐标
+// glm::vec3 lightPos(0.001f, 3.7389f, 5.207f);	//球的灯坐标
 
 glm::vec3 cameraPos{0.0, 0.0, 15.0};
 float focalLength{10.0};
@@ -57,6 +59,10 @@ std::vector<std::vector<int>> faceIndex2verInd;
 std::vector<glm::vec3> vertexNormal;
 constexpr int sampleTime = 16;
 std::vector<glm::vec3> samplePos;				
+// std::vector<size_t> mirrorIndex{10,11};
+// std::vector<size_t> mirrorIndex{4,5};
+// std::vector<size_t> mirrorIndex{6,7};
+std::vector<size_t> mirrorIndex{26, 31};
 
 bool orbit = false;
 
@@ -435,6 +441,10 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
 				break;
 
 			case DisplayModel::PHONG:
+				displayModel = DisplayModel::MIRROE;
+				break;
+
+			case DisplayModel::MIRROE:
 				displayModel = DisplayModel::POINT_CLOUND;
 				break;
 			default:
@@ -672,6 +682,83 @@ void drawSoftShadingScene(DrawingWindow &window, const std::vector<ModelTriangle
 	}
 }
 
+void drawMirrorScene(DrawingWindow &window, const std::vector<ModelTriangle> &model) {
+	drawSoftShadingScene(window, model);
+
+	for (int x = 0; x < WIDTH; x++) {
+		for (int y = 0; y < HEIGHT; y++) {
+			float x_cam = (x - static_cast<float>(WIDTH) / 2.0f) / (focalLength * 80);
+    		float y_cam = -(y - static_cast<float>(HEIGHT) / 2.0f) / (focalLength * 80);
+    		glm::vec3 dir_camera(x_cam, y_cam, -1.0f);
+			dir_camera = glm::normalize(dir_camera);
+    		glm::vec3 dir_world = dir_camera * glm::inverse(cameraOrientation);
+			auto intersection = getClosestIntersection(cameraPos, dir_world, model);
+			if (intersection.distanceFromCamera > 0.0 && std::find(mirrorIndex.begin(), mirrorIndex.end(), intersection.triangleIndex) != mirrorIndex.end()) {
+				auto intersectColor = intersection.intersectedTriangle.colour;
+				auto pos = intersection.intersectionPoint;
+				auto I = dir_world; 
+				auto N = intersection.intersectedTriangle.normal;
+				if (glm::dot(I, N) > 0.0f) {
+                	N = -N;
+            	}
+				const float EPS = 1e-4f;
+            	auto reflectOrigin = pos + EPS * N;
+				auto R = glm::normalize(I - 2* glm::dot(I, N) * N);
+				auto mirrorIntersection = getClosestIntersection(reflectOrigin, R, model);
+				int hitTime = 0;
+				for (const auto &pos : samplePos) {
+					if (lightVisible(intersection.intersectionPoint, pos, model, intersection.triangleIndex)) {
+						hitTime++;
+					}
+				}
+
+				float intersectShadingFactor = float(hitTime) / float(sampleTime);
+				if (mirrorIntersection.distanceFromCamera > 0) {
+					// auto canvasPos = projectVertiexOntoCanvasPoint(cameraPos, focalLength, mirrorIntersection.intersectionPoint, 80.0);
+					// window.setPixelColour(x, y, window.getPixelColour(canvasPos.x, canvasPos.y));
+					auto pos = mirrorIntersection.intersectionPoint;
+					auto color = mirrorIntersection.intersectedTriangle.colour;
+					color = mixColor(color, intersectColor);
+					auto dir_light = lightPos - pos; 
+					auto dist = glm::length(dir_light);
+					auto proximityFactor = std::min(888 / (3 * PI * dist * dist), 1.0f);
+					int hitTime = 0;
+					auto ambientFactor = 0.2;
+					for (const auto &pos : samplePos) {
+						if (lightVisible(mirrorIntersection.intersectionPoint, pos, model, mirrorIntersection.triangleIndex)) {
+							hitTime++;
+						}
+					}
+
+					float shadingFactor = float(hitTime) / float(sampleTime);
+					// Colour c{int(color.red * shadingFactor), int(color.green * shadingFactor), int(color.blue * shadingFactor)};
+					// window.setPixelColour(x, y, packColor(c));
+
+					Colour c{int(color.red * ambientFactor), int(color.green * ambientFactor), int(color.blue * ambientFactor)};
+					if (lightVisible(mirrorIntersection.intersectionPoint, lightPos, model, mirrorIntersection.triangleIndex)) {
+						auto triangle = mirrorIntersection.intersectedTriangle;
+						auto normal = triangle.normal;
+						auto reflectFactor = std::max(glm::dot(normal, glm::normalize(dir_light)), 0.0f);
+						auto diffuseFactor = 0.6f * std::min(reflectFactor * proximityFactor, 1.0f);
+						auto h = glm::normalize((dir_world + dir_light)/glm::length(dir_light + dir_world));
+						auto exp = 16.0f;
+						auto specularFactor =  0.2f * std::pow(std::max(glm::dot(normal, h), 0.0f), exp) * proximityFactor;
+						double lightFactor = 1.0;
+						if (lightVisible(intersection.intersectionPoint, lightPos, model, intersection.triangleIndex)) {
+							lightFactor = (diffuseFactor + specularFactor + ambientFactor) * shadingFactor * intersectShadingFactor;
+							if (lightFactor < ambientFactor) {
+								lightFactor = ambientFactor;
+							}
+							c = Colour{int(color.red * lightFactor), int(color.green * lightFactor), int(color.blue * lightFactor)};
+						}
+					}
+					window.setPixelColour(x, y, packColor(c));
+				}
+			}
+		}
+	}
+}
+
 
 void drawGouraudShading(DrawingWindow &window, const std::vector<ModelTriangle> &model) {
 	window.clearPixels();
@@ -830,6 +917,10 @@ void draw(DrawingWindow &window, const std::vector<ModelTriangle> &model) {
 		drawPhongShading(window, model);
 		break;
 
+	case DisplayModel::MIRROE:
+		drawMirrorScene(window, model);
+		break;
+
 	default:
 		break;
 	}
@@ -843,11 +934,11 @@ int main(int argc, char *argv[]) {
 	SDL_Event event;
 	std::vector<CanvasTriangle> triangles;
 	// auto model = parseOBJ2ModelTriangle("models/cornell-box_separate.obj", "models/cornell-box.mtl");
-	// auto model = parseOBJ2ModelTriangle("models/cornell-box.obj", "models/cornell-box.mtl");
+	auto model = parseOBJ2ModelTriangle("models/cornell-box.obj", "models/cornell-box.mtl");
 	// auto model = parseOBJ2ModelTriangle("models/cornell-no-box.obj", "models/cornell-box.mtl");
-	auto model = parseOBJ2ModelTriangle("models/sphere.obj", "models/cornell-box.mtl");
-	auto [ver2face, face2ver] = createVertex2FaceIndex("models/sphere.obj");
-	// auto [ver2face, face2ver] = createVertex2FaceIndex("models/cornell-box.obj");
+	// auto model = parseOBJ2ModelTriangle("models/sphere.obj", "models/cornell-box.mtl");
+	// auto [ver2face, face2ver] = createVertex2FaceIndex("models/sphere.obj");
+	auto [ver2face, face2ver] = createVertex2FaceIndex("models/cornell-box.obj");
 	// auto [ver2face, face2ver] = createVertex2FaceIndex("models/cornell-no-box.obj");
 	verInd2faceInd = std::move(ver2face);
 	faceIndex2verInd = std::move(face2ver);

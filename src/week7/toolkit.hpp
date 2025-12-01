@@ -582,7 +582,7 @@ RayTriangleIntersection getClosestIntersection(glm::vec3 cameraPos, glm::vec3 ra
 	return RayTriangleIntersection{intersectionPoint, -1, triangle, 0};
 }
 
-RayTriangleIntersection getClosestIntersection(glm::vec3 cameraPos, glm::vec3 rayDirect, const std::vector<ModelTriangle> &triangles) {
+RayTriangleIntersection getClosestIntersection(glm::vec3 startPos, glm::vec3 rayDirect, const std::vector<ModelTriangle> &triangles) {
 	int index = 0;
 	RayTriangleIntersection res;
 	res.distanceFromCamera = -1.0;
@@ -590,7 +590,7 @@ RayTriangleIntersection getClosestIntersection(glm::vec3 cameraPos, glm::vec3 ra
 	for (const auto &triangle : triangles) {
 		glm::vec3 e0 = triangle.vertices[1] - triangle.vertices[0];
 		glm::vec3 e1 = triangle.vertices[2] - triangle.vertices[0];
-		glm::vec3 SPVector = cameraPos - triangle.vertices[0];
+		glm::vec3 SPVector = startPos - triangle.vertices[0];
 		glm::mat3 DEMatrix(-rayDirect, e0, e1);
 		glm::vec3 possibleSolution = glm::inverse(DEMatrix) * SPVector;
 
@@ -652,4 +652,12 @@ bool lightVisible(glm::vec3 surfacePos, glm::vec3 lightPos, const std::vector<Mo
 	}
 
 	return true;
+}
+
+Colour mixColor(Colour lhs, Colour rhs) {
+	auto r = ((lhs.red/255.0f) * (rhs.red/255.0f)) * 255.0f;
+	auto g = ((lhs.green/255.0f) * (rhs.green/255.0f)) * 255.0f;
+	auto b = ((lhs.blue/255.0f) * (rhs.blue/255.0f)) * 255.0f;
+
+	return Colour(int(r), int(g), int(b));
 }
