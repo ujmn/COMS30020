@@ -1,10 +1,4 @@
----
-typora-root-url: resource
----
-
-```markdown
-<div align="center">[Chinese](#chinese) | [English](#english)</div>
-```
+[Chinese](#chinese) | [English](#english)
 
 <a id="chinese"></a>>
 
@@ -50,7 +44,7 @@ The 3D renderer is a simple implementation in **C++**, supporting multiple class
 - [Mirror Reflection](#mirror-reflection)
 - [Sphere Lighting](#sphere-lighting)
 - [Gouraud Shading](#gouraud-shading)
--  [Phong Shading](#phong-shading)
+- [Phong Shading](#phong-shading)
 
 ## 🛠️ Environment
 
@@ -66,58 +60,58 @@ The 3D renderer is a simple implementation in **C++**, supporting multiple class
 
 ## Point Cloud
 
-![](pointCloud.png)
+![](/resource/pointCloud.png)
 
 <a id="wire-frame"></a>
 
 ## Wire Frame
 
-![](wireFrame.png)
+![](/resource/wireFrame.png)
 
 <a id="rasterization"></a>
 
 ## Rasterization
 
-![](raster.png)
+![](/resource/raster.png)
 
 <a id="ray-tracing"></a>
 
 ## Ray Tracing
 
-![](rayTracing.png)
+![](/resource/rayTracing.png)
 
 <a id="soft-shadows"></a>
 
 ## Soft Shadows
 
-![](softShadow.png)
+![](/resource/softShadow.png)
 
 <a id="lighting-model"></a>
 
 ## Lighting Model
 
-![](lightModel.png)
+![](/resource/lightModel.png)
 
 <a id="mirror-reflection"></a>
 
 ## Mirror Reflection
 
-![](mirrorReflect.png)
+![](/resource/mirrorReflect.png)
 
 <a id="sphere-lighting-model"></a>
 
 ## Sphere Lighting Model
 
-![](sphere_lightModel.png)
+![](/resource/sphere_lightModel.png)
 
 <a id="gouraud-shading"></a>
 
 ## Gouraud Shading
 
-![](sphere_gouraudShading.png)
+![](/resource/sphere_gouraudShading.png)
 
 <a id="phong-shading"></a>
 
 ## Phong Shading
 
-![](sphere_phongShading.png)
+![](/resource/sphere_phongShading.png)
