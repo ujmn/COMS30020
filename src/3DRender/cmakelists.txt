@@ -1,0 +1,76 @@
+﻿project(3DScene)
+
+add_executable(3DScene
+        ${LIBS_DIR}/sdw/CanvasPoint.cpp
+        ${LIBS_DIR}/sdw/CanvasTriangle.cpp
+        ${LIBS_DIR}/sdw/Colour.cpp
+        ${LIBS_DIR}/sdw/DrawingWindow.cpp
+        ${LIBS_DIR}/sdw/ModelTriangle.cpp
+        ${LIBS_DIR}/sdw/RayTriangleIntersection.cpp
+        ${LIBS_DIR}/sdw/TextureMap.cpp
+        ${LIBS_DIR}/sdw/TexturePoint.cpp
+        ${LIBS_DIR}/sdw/Utils.cpp
+        Model.cpp
+        Scene.cpp
+        RenderStrategy.cpp
+        RenderUtils.cpp
+        RenderContext.cpp
+        main.cpp)
+
+if (MSVC)
+    target_compile_options(3DScene
+            PUBLIC
+            /W3
+            /Zc:wchar_t
+            )
+    set(DEBUG_OPTIONS /MTd)
+    set(RELEASE_OPTIONS /MT /GF /Gy /O2 /fp:fast)
+    if (NOT DEFINED SDL2_LIBRARIES)
+        set(SDL2_LIBRARIES SDL2::SDL2 SDL2::SDL2main)
+    endif()
+else ()
+    target_compile_options(3DScene
+        PUBLIC
+        -Wall
+        -Wextra
+        -Wcast-align
+        -Wfatal-errors
+        -Werror=return-type
+        -Wno-unused-parameter
+        -Wno-unused-variable
+        -Wno-ignored-attributes)
+
+    set(DEBUG_OPTIONS -O2 -fno-omit-frame-pointer -g)
+    set(RELEASE_OPTIONS -O3 -march=native -mtune=native)
+    target_link_libraries(3DScene PUBLIC $<$<CONFIG:Debug>:-Wl,-lasan>)
+
+endif()
+
+
+target_compile_options(3DScene PUBLIC "$<$<CONFIG:RelWithDebInfo>:${RELEASE_OPTIONS}>")
+target_compile_options(3DScene PUBLIC "$<$<CONFIG:Release>:${RELEASE_OPTIONS}>")
+target_compile_options(3DScene PUBLIC "$<$<CONFIG:Debug>:${DEBUG_OPTIONS}>")
+ 
+target_link_libraries(3DScene PRIVATE ${SDL2_LIBRARIES})
+target_include_directories(3DScene PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+
+set(SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/models/")
+set(DEST_DIR "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/models/")
+
+set(SDL_LIB_SOURCE_DIR "${CMAKE_SOURCE_DIR}/libs/SDL2/lib/x64/")
+set(SDL_LIB_DEST_DIR "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/")
+
+add_custom_command(
+    TARGET 3DScene POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${SOURCE_DIR}
+        ${DEST_DIR}
+)
+
+add_custom_command(
+    TARGET 3DScene POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${SDL_LIB_SOURCE_DIR}
+        ${SDL_LIB_DEST_DIR}
+)

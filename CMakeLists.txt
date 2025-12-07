@@ -25,7 +25,6 @@ set(SDL2_INCLUDE_DIRS libs/SDL2)
 set(SLD2_DIR libs/SDL2)
 
 list(APPEND CMAKE_PREFIX_PATH libs/SDL2/cmake)
-# include(libs/SDL2/cmake)
 
 find_package(SDL2 REQUIRED)
 
@@ -85,3 +84,4 @@ add_subdirectory(src/week4)
 add_subdirectory(src/week5)
 add_subdirectory(src/week6)
 add_subdirectory(src/week7)
+add_subdirectory(src/3DRender)

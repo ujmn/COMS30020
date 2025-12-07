@@ -422,8 +422,6 @@ decltype(auto) createVertex2FaceIndex(std::string modelFile) {
 		}
 	}
 
-
-
 	return std::tuple<std::vector<std::vector<int>>, std::vector<std::vector<int>>>{verInd2faceInd, faceIndex2verInd};
 }
 
